@@ -1,0 +1,1696 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Music Player</title>
+<style>
+  :root {
+    --accent: #ff4d4d;
+    --accent-2: #ff8080;
+    --accent-soft: rgba(255, 77, 77, 0.25);
+    --accent-fade: rgba(255, 77, 77, 0.15);
+    --accent-glow: rgba(255, 77, 77, 0.5);
+    --accent-bright: #ff6666;
+    --accent-deep: #cc3d3d;
+    --bg-tint: rgba(255, 77, 77, 0.08);
+    --bg-base: #0a0505;
+    --bg-panel: rgba(18, 10, 12, 0.92);
+    --text-primary: #ffffff;
+    --text-secondary: #b8a3a3;
+    --text-muted: #8a7373;
+    --color-transition: 0.8s cubic-bezier(.4, 0, .2, 1);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI',Roboto,system-ui,sans-serif; }
+
+  html, body {
+    width:100%; height:100%; overflow:hidden;
+    background: var(--bg-base);
+    color: var(--text-primary);
+    user-select:none;
+  }
+
+  /* ============ ФОН ============ */
+  .bg-layer {
+    position:fixed; inset:-10%; z-index:0;
+    background-size:cover; background-position:center;
+    background-color:#0a0505;
+    filter: brightness(0.35) saturate(1.1) blur(60px);
+    transform: scale(1.1);
+    transition: opacity 1.2s ease;
+    opacity:0;
+  }
+  .bg-layer.active { opacity:1; }
+  .bg-overlay {
+    position:fixed; inset:0; z-index:1; pointer-events:none;
+    background: linear-gradient(180deg, var(--bg-tint) 0%, rgba(8,4,6,0.88) 100%);
+  }
+  .bg-vignette {
+    position:fixed; inset:0; z-index:1; pointer-events:none;
+    background: radial-gradient(ellipse at center, transparent 25%, rgba(0,0,0,0.6) 100%);
+  }
+
+  /* ============ ВЕРХНЯЯ ПАНЕЛЬ ============ */
+  .top-bar {
+    position:fixed; top:0; left:0; right:0; z-index:10;
+    padding: 24px 32px;
+    display:flex; justify-content:space-between; align-items:flex-start;
+    pointer-events:none;
+  }
+  .top-bar > * { pointer-events:auto; }
+
+  .track-info { max-width: 55%; overflow:hidden; }
+  .track-name {
+    font-size: 1.4rem; font-weight:600; letter-spacing:-0.3px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    text-shadow: 0 2px 12px rgba(0,0,0,0.7);
+    min-height: 1.9rem;
+  }
+  .track-name:empty::before {
+    content: "Ничего не выбрано";
+    color: #555;
+  }
+  .artist-name {
+    font-size: .95rem; color: var(--text-secondary); margin-top:4px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+    min-height: 1.3rem;
+  }
+  .artist-name:empty::before {
+    content: "Загрузите свою музыку";
+    color: #444;
+  }
+
+  .top-actions { display:flex; gap:10px; }
+  .icon-btn {
+    background: rgba(255,255,255,.06);
+    border:1px solid rgba(255,255,255,.1);
+    color: var(--text-secondary);
+    width:42px; height:42px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+    transition: background .2s, color .2s, border-color .2s, box-shadow .2s;
+    backdrop-filter: blur(10px);
+  }
+  .icon-btn:hover {
+    background: var(--accent-soft);
+    color: #fff;
+    border-color: var(--accent);
+    box-shadow: 0 0 16px var(--accent-glow);
+  }
+  .icon-btn svg { width:18px; height:18px; fill:currentColor; }
+
+  /* ============ ОБЛОЖКА ============ */
+  .cover-stage {
+    position:fixed; inset:0; z-index:5;
+    display:flex; justify-content:center; align-items:center;
+    pointer-events:none;
+  }
+  .cover-box {
+    width: 360px; height: 360px;
+    border-radius: 16px; overflow:hidden;
+    box-shadow:
+      0 30px 80px rgba(0,0,0,0.85),
+      0 0 0 1px rgba(255,255,255,0.06),
+      0 0 100px var(--accent-fade);
+    transition: box-shadow var(--color-transition);
+    background: #1a0f12;
+    pointer-events:auto;
+  }
+  .cover-box img { width:100%; height:100%; object-fit:cover; display:block; }
+  .cover-box.playing {
+    box-shadow:
+      0 30px 80px rgba(0,0,0,0.85),
+      0 0 0 1px rgba(255,255,255,0.06),
+      0 0 120px var(--accent-glow);
+  }
+
+  /* ============ НИЖНЯЯ ПАНЕЛЬ ============ */
+  .bottom-bar {
+    position:fixed; bottom:0; left:0; right:0; z-index:10;
+    padding: 0 32px 24px;
+    display:flex; flex-direction:column; gap:14px;
+  }
+
+  .progress-wrap {
+    display:flex; align-items:center; gap:14px;
+    padding: 0 4px;
+  }
+  .time {
+    font-size:.78rem; color: var(--text-secondary);
+    font-variant-numeric:tabular-nums;
+    min-width:40px; text-align:center;
+  }
+  .progress-bar {
+    flex:1;
+    -webkit-appearance:none; appearance:none;
+    height:4px; border-radius:4px;
+    background: transparent;
+    outline:none; cursor:pointer;
+  }
+  .progress-bar::-webkit-slider-runnable-track {
+    height:4px;
+    background:
+      linear-gradient(to right,
+        var(--accent) 0%, var(--accent) var(--fill, 0%),
+        rgba(255,255,255,0.15) var(--fill, 0%),
+        rgba(255,255,255,0.15) 100%);
+    border-radius:4px;
+  }
+  .progress-bar::-webkit-slider-thumb {
+    -webkit-appearance:none; appearance:none;
+    width:14px; height:14px; border-radius:50%;
+    background:#fff; margin-top:-5px;
+    box-shadow:0 0 0 3px var(--accent-soft), 0 0 12px var(--accent-glow);
+  }
+  .progress-bar::-moz-range-track {
+    height:4px; background:rgba(255,255,255,0.15); border-radius:4px;
+  }
+  .progress-bar::-moz-range-progress {
+    height:4px; background: var(--accent); border-radius:4px;
+  }
+  .progress-bar::-moz-range-thumb {
+    width:14px; height:14px; border-radius:50%; background:#fff; border:none;
+    box-shadow:0 0 0 3px var(--accent-soft);
+    cursor:pointer;
+  }
+
+  .controls-row {
+    display:flex; align-items:center; justify-content:space-between;
+    gap:16px;
+  }
+  .ctrl-group { display:flex; align-items:center; gap:10px; }
+  .ctrl-group.left { flex: 0 0 220px; justify-content:flex-start; }
+  .ctrl-group.center { flex: 0 0 auto; gap:20px; }
+  .ctrl-group.right { flex: 0 0 220px; justify-content:flex-end; }
+
+  .ctrl-btn {
+    background: rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.1);
+    color:#fff;
+    width:48px; height:48px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; padding:0; flex-shrink:0;
+    backdrop-filter: blur(10px);
+    transition: background .2s, border-color .2s, box-shadow .2s, transform .15s;
+  }
+  .ctrl-btn:hover {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    box-shadow: 0 0 16px var(--accent-glow);
+  }
+  .ctrl-btn:active { transform:scale(.94); }
+  .ctrl-btn svg { width:20px; height:20px; fill:#fff; pointer-events:none; }
+
+  .ctrl-btn.play-main {
+    width:64px; height:64px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    border:none;
+    box-shadow: 0 12px 30px -5px var(--accent-glow);
+  }
+  .ctrl-btn.play-main svg { width:26px; height:26px; fill:#1a0808; }
+  .ctrl-btn.play-main:hover {
+    background: linear-gradient(135deg, var(--accent-bright), var(--accent-2));
+    transform: translateY(-2px);
+  }
+  .ctrl-btn.play-main:active { transform: scale(0.96); }
+
+  .ctrl-btn.mode-btn.active {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    box-shadow: 0 0 16px var(--accent-glow);
+  }
+
+  .vol-group {
+    display:flex; align-items:center; gap:10px;
+    background: rgba(255,255,255,.04);
+    border:1px solid rgba(255,255,255,.08);
+    border-radius: 24px;
+    padding: 6px 14px 6px 10px;
+    backdrop-filter: blur(10px);
+  }
+  .vol-icon {
+    width:26px; height:26px;
+    display:flex; align-items:center; justify-content:center;
+    color: var(--accent-2); cursor:pointer;
+    flex-shrink:0;
+  }
+  .vol-icon:hover { color: var(--accent); }
+  .vol-icon svg { width:18px; height:18px; fill:currentColor; }
+  .vol-slider {
+    width:100px;
+    -webkit-appearance:none; appearance:none;
+    height:4px; border-radius:4px;
+    background: transparent; outline:none; cursor:pointer;
+  }
+  .vol-slider::-webkit-slider-runnable-track {
+    height:4px;
+    background:
+      linear-gradient(to right,
+        var(--accent) 0%, var(--accent) var(--fill, 0%),
+        rgba(255,255,255,0.18) var(--fill, 0%),
+        rgba(255,255,255,0.18) 100%);
+    border-radius:4px;
+  }
+  .vol-slider::-webkit-slider-thumb {
+    -webkit-appearance:none; appearance:none;
+    width:12px; height:12px; border-radius:50%;
+    background:#fff; margin-top:-4px;
+    box-shadow:0 0 0 2px var(--accent-glow);
+  }
+  .vol-slider::-moz-range-track {
+    height:4px; background:rgba(255,255,255,0.18); border-radius:4px;
+  }
+  .vol-slider::-moz-range-progress {
+    height:4px; background: var(--accent); border-radius:4px;
+  }
+  .vol-slider::-moz-range-thumb {
+    width:12px; height:12px; border-radius:50%; background:#fff; border:none;
+    box-shadow:0 0 0 2px var(--accent-glow);
+  }
+
+  /* ============ ПАНЕЛИ ============ */
+  .side-panel {
+    position:fixed; top:0; right:0; bottom:0; z-index:20;
+    width: 420px; max-width: 90vw;
+    background: var(--bg-panel);
+    backdrop-filter: blur(30px) saturate(1.2);
+    border-left: 1px solid rgba(255,255,255,0.08);
+    transform: translateX(100%);
+    transition: transform .35s cubic-bezier(.4,0,.2,1);
+    display:flex; flex-direction:column;
+    box-shadow: -20px 0 60px rgba(0,0,0,0.6);
+  }
+  .side-panel.open { transform: translateX(0); }
+
+  .panel-header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 20px 24px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    flex-shrink:0;
+  }
+  .panel-title {
+    font-size: 1rem; font-weight:600;
+    color: var(--accent-2);
+    letter-spacing:.5px;
+    text-transform: uppercase;
+  }
+  .panel-close {
+    width:32px; height:32px; border-radius:50%;
+    background:rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.08);
+    color: var(--text-secondary);
+    cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    font-size:1rem;
+  }
+  .panel-close:hover { background: var(--accent-soft); color:#fff; }
+
+  .panel-body {
+    flex:1; overflow-y:auto;
+    padding: 16px 20px;
+  }
+  .panel-body::-webkit-scrollbar { width:5px; }
+  .panel-body::-webkit-scrollbar-thumb {
+    background: var(--accent-deep);
+    border-radius:4px;
+  }
+
+  .lyrics-toolbar {
+    display:flex; justify-content:space-between; align-items:center;
+    margin-bottom:12px; gap:8px;
+  }
+  .lyrics-status {
+    font-size:.75rem; color: var(--text-muted); font-style:italic;
+    flex:1;
+  }
+  .lyrics-status.loading { color: var(--accent-2); }
+  .lyrics-status.found   { color: #9aff9a; }
+  .lyrics-status.notfound{ color: var(--text-muted); }
+  .lyrics-actions { display:flex; gap:6px; }
+  .small-btn {
+    background:rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.08);
+    color: var(--text-secondary);
+    min-width:30px; height:30px; padding:0 10px;
+    border-radius:15px;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; font-size:.75rem; font-weight:600;
+  }
+  .small-btn:hover {
+    background: var(--accent-soft);
+    color:#fff;
+    border-color: var(--accent);
+  }
+
+  .lyrics-content {
+    font-size:.9rem; line-height:1.65;
+    color:#d9c4c4;
+    white-space: pre-wrap; word-wrap: break-word;
+    text-align:center;
+    padding: 8px 4px 20px;
+  }
+  .lyrics-content.empty { color: var(--text-muted); font-style:italic; text-align:center; padding: 40px 20px; }
+  .lyrics-content.font-large { font-size:1.05rem; }
+  .lyrics-content.font-xlarge { font-size:1.25rem; }
+
+  .playlist-item {
+    display:flex; align-items:center; gap:12px;
+    padding:10px 12px; border-radius:10px;
+    color:#b09c9c; font-size:.9rem;
+    cursor:pointer;
+    border-left:3px solid transparent;
+    transition: background .15s, color .15s, border-color .15s;
+  }
+  .playlist-item:hover { background:rgba(255,255,255,.05); color:#fff; }
+  .playlist-item.active {
+    background: var(--accent-fade);
+    color:#fff;
+    border-left-color: var(--accent);
+  }
+  .playlist-item .meta { flex:1; overflow:hidden; }
+  .playlist-item .title {
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    display:flex; align-items:center; gap:6px;
+  }
+  .playlist-item .lyric-badge {
+    display:inline-block; font-size:.6rem;
+    background: var(--accent-soft);
+    color: var(--accent-2);
+    padding:2px 6px; border-radius:6px;
+    font-weight:600; letter-spacing:.3px; flex-shrink:0;
+  }
+  .playlist-item .artist {
+    font-size:.72rem; color: var(--text-muted); margin-top:2px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .playlist-item.active .artist { color: var(--accent-2); }
+  .remove-track {
+    width:24px; height:24px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    background:transparent; color: var(--text-muted);
+    font-size:.85rem; border:none; cursor:pointer;
+    opacity:0; transition:.15s; flex-shrink:0;
+  }
+  .playlist-item:hover .remove-track { opacity:1; }
+  .remove-track:hover { background: var(--accent-soft); color:#fff; }
+  .empty-msg {
+    text-align:center; color: var(--text-muted); font-size:.88rem;
+    padding:40px 12px; font-style:italic;
+  }
+
+  .section-label {
+    font-size:.7rem; font-weight:600;
+    color: var(--accent-2);
+    letter-spacing:.6px;
+    text-transform:uppercase;
+    margin: 16px 0 10px;
+  }
+  .section-label:first-child { margin-top:0; }
+
+  .eq-presets { display:flex; gap:6px; flex-wrap:wrap; }
+  .eq-preset {
+    flex:1; min-width:70px;
+    padding:8px 10px; border-radius:10px;
+    background:rgba(255,255,255,.04);
+    border:1px solid rgba(255,255,255,.08);
+    color: var(--text-muted); font-size:.75rem; font-weight:500;
+    cursor:pointer; text-align:center;
+    transition: background .15s, color .15s, border-color .15s;
+  }
+  .eq-preset:hover {
+    background: var(--accent-fade);
+    color:#fff;
+    border-color: var(--accent);
+  }
+  .eq-preset.active {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color:#fff;
+  }
+
+  .eq-bands {
+    display:flex; gap:4px; justify-content:space-between;
+    padding: 10px 6px;
+    background: rgba(0,0,0,0.25); border-radius:14px;
+    border:1px solid rgba(255,255,255,0.05);
+  }
+  .eq-band { flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; min-width:0; }
+  .eq-band .value {
+    font-size:.6rem; color: var(--accent-2); font-variant-numeric:tabular-nums;
+    font-weight:500; height:12px; line-height:12px;
+  }
+  .eq-band .eq-slider-wrap {
+    position:relative; height:100px; width:100%;
+    display:flex; justify-content:center; align-items:center;
+  }
+  .eq-band input[type=range] {
+    position:absolute; width:90px; height:20px;
+    transform: rotate(-90deg); transform-origin: center;
+    -webkit-appearance:none; background: transparent;
+  }
+  .eq-band input[type=range]::-webkit-slider-runnable-track {
+    height:4px;
+    background: linear-gradient(90deg, var(--accent-deep), var(--accent), var(--accent-2));
+    border-radius:2px;
+  }
+  .eq-band input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance:none; width:12px; height:12px; border-radius:50%;
+    background:#fff; margin-top:-4px;
+    border:2px solid var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-soft);
+    cursor:grab;
+  }
+  .eq-band input[type=range]::-moz-range-track {
+    height:4px;
+    background: linear-gradient(90deg, var(--accent-deep), var(--accent), var(--accent-2));
+    border-radius:2px;
+  }
+  .eq-band input[type=range]::-moz-range-thumb {
+    width:12px; height:12px; border-radius:50%; background:#fff;
+    border:2px solid var(--accent);
+    cursor:grab;
+  }
+  .eq-band .label { font-size:.55rem; color: var(--text-muted); text-align:center; }
+
+  .upload-section { display:flex; flex-direction:column; gap:8px; }
+  .upload-btn {
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    padding:12px 16px; border-radius:12px;
+    background: var(--accent-fade);
+    border:1px dashed var(--accent-glow);
+    color: var(--accent-2);
+    font-size:.85rem; font-weight:500;
+    cursor:pointer;
+    transition: background .2s, border-color .2s, color .2s;
+  }
+  .upload-btn:hover {
+    background: var(--accent-soft);
+    color:#fff;
+    border-color: var(--accent);
+  }
+  .upload-btn svg { width:16px; height:16px; fill:currentColor; }
+  .upload-btn input { display:none; }
+  .upload-btn.lyrics-upload {
+    background: rgba(180,180,255,.08);
+    border-color: rgba(180,180,255,.3);
+    color:#c9c9ff;
+  }
+  .upload-btn.lyrics-upload:hover {
+    background:rgba(180,180,255,.18);
+    color:#fff;
+    border-color:#a3a3ff;
+  }
+  .clear-btn {
+    padding:12px 16px; border-radius:12px;
+    background:rgba(255,255,255,.04);
+    border:1px solid rgba(255,255,255,.08);
+    color: var(--text-muted); cursor:pointer; font-size:.85rem; font-weight:500;
+  }
+  .clear-btn:hover {
+    background: var(--accent-fade);
+    color: #ff9a9a;
+    border-color: var(--accent-glow);
+  }
+
+  .toast {
+    position:fixed; bottom:120px; left:50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--bg-panel);
+    backdrop-filter:blur(10px);
+    color:#fff; padding:12px 22px; border-radius:12px;
+    border:1px solid var(--accent-glow);
+    font-size:.85rem; opacity:0; transition: opacity .3s, transform .3s; z-index:100;
+    box-shadow:0 10px 30px rgba(0,0,0,.5);
+    pointer-events:none;
+  }
+  .toast.show { opacity:1; transform: translateX(-50%) translateY(0); }
+  .toast.error { border-color:rgba(255,80,80,.5); color:#ffbaba; }
+
+  body::-webkit-scrollbar { display:none; }
+</style>
+</head>
+<body>
+
+<!-- ФОН: два слоя для кроссфейда -->
+<div class="bg-layer" id="bgLayerA"></div>
+<div class="bg-layer" id="bgLayerB"></div>
+<div class="bg-overlay"></div>
+<div class="bg-vignette"></div>
+
+<!-- ВЕРХНЯЯ ПАНЕЛЬ -->
+<div class="top-bar">
+  <div class="track-info">
+    <div class="track-name" id="trackName"></div>
+    <div class="artist-name" id="artistName"></div>
+  </div>
+  <div class="top-actions">
+    <button class="icon-btn" id="openLyricsBtn" title="Текст песни">
+      <svg viewBox="0 0 24 24"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z"/></svg>
+    </button>
+    <button class="icon-btn" id="openPlaylistBtn" title="Плейлист">
+      <svg viewBox="0 0 24 24"><path d="M3 6h13v2H3zm0 5h13v2H3zm0 5h9v2H3zm17-9v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V7h-2z"/></svg>
+    </button>
+    <button class="icon-btn" id="openSettingsBtn" title="Настройки">
+      <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- ОБЛОЖКА -->
+<div class="cover-stage">
+  <div class="cover-box" id="coverBox">
+    <img id="coverArt" alt="">
+  </div>
+</div>
+
+<!-- НИЖНЯЯ ПАНЕЛЬ -->
+<div class="bottom-bar">
+  <div class="progress-wrap">
+    <span class="time" id="currentTime">0:00</span>
+    <input type="range" class="progress-bar" id="progressSlider" min="0" max="100" step="0.1" value="0">
+    <span class="time" id="duration">0:00</span>
+  </div>
+
+  <div class="controls-row">
+    <div class="ctrl-group left">
+      <button class="ctrl-btn mode-btn" id="shuffleBtn" title="Случайный порядок">
+        <svg viewBox="0 0 24 24"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
+      </button>
+      <button class="ctrl-btn mode-btn" id="repeatBtn" title="Повтор">
+        <svg id="repeatIcon" viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
+      </button>
+    </div>
+
+    <div class="ctrl-group center">
+      <button class="ctrl-btn" id="prevBtn" title="Предыдущий">
+        <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+      </button>
+      <button class="ctrl-btn play-main" id="playBtn" title="Играть">
+        <svg id="playIcon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+      </button>
+      <button class="ctrl-btn" id="nextBtn" title="Следующий">
+        <svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg>
+      </button>
+    </div>
+
+    <div class="ctrl-group right">
+      <div class="vol-group">
+        <div class="vol-icon" id="volumeIcon">
+          <svg id="volIcon" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+        </div>
+        <input type="range" class="vol-slider" id="volumeSlider" min="0" max="1" step="0.01" value="0.8">
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ПАНЕЛИ -->
+<div class="side-panel" id="panelLyrics">
+  <div class="panel-header">
+    <span class="panel-title">📝 Текст песни</span>
+    <button class="panel-close" data-close="panelLyrics">✕</button>
+  </div>
+  <div class="panel-body">
+    <div class="lyrics-toolbar">
+      <span class="lyrics-status" id="lyricsStatus"></span>
+      <div class="lyrics-actions">
+        <button class="small-btn" id="lyricsFindBtn" title="Найти в интернете">🔍</button>
+        <button class="small-btn" id="lyricsFontBtn" title="Размер">A</button>
+      </div>
+    </div>
+    <div class="lyrics-content empty" id="lyricsContent">Текст появится здесь после воспроизведения</div>
+  </div>
+</div>
+
+<div class="side-panel" id="panelPlaylist">
+  <div class="panel-header">
+    <span class="panel-title">📋 Плейлист</span>
+    <button class="panel-close" data-close="panelPlaylist">✕</button>
+  </div>
+  <div class="panel-body" id="playlistBody">
+    <div class="empty-msg">Плейлист пуст. Загрузите MP3-файлы.</div>
+  </div>
+</div>
+
+<div class="side-panel" id="panelSettings">
+  <div class="panel-header">
+    <span class="panel-title">⚙️ Настройки</span>
+    <button class="panel-close" data-close="panelSettings">✕</button>
+  </div>
+  <div class="panel-body">
+    <div class="section-label">🎚️ Эквалайзер</div>
+    <div class="eq-presets" id="eqPresets"></div>
+    <div class="eq-bands" id="eqBands" style="margin-top:14px;"></div>
+
+    <div class="section-label">📂 Файлы</div>
+    <div class="upload-section">
+      <label class="upload-btn">
+        <svg viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg>
+        Добавить треки
+        <input type="file" id="fileInput" accept="audio/*" multiple>
+      </label>
+      <label class="upload-btn lyrics-upload">
+        📄 Свой текст (.txt/.lrc)
+        <input type="file" id="lyricsFileInput" accept=".txt,.lrc,text/plain">
+      </label>
+      <button class="clear-btn" id="clearBtn">Очистить плейлист</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  console.log('=== Music Player INIT ===');
+
+  const BG_IMAGE = "";  // ← пустая строка — не пытаемся грузить несуществующий файл
+  const LRCLIB_ENABLED = true;
+  const FALLBACK_ACCENT = [255, 77, 77];
+
+  // Дефолтная обложка — встроенный SVG
+  const DEFAULT_COVER = "data:image/svg+xml;utf8," + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">' +
+    '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">' +
+    '<stop offset="0" stop-color="#2a1a2e"/>' +
+    '<stop offset="1" stop-color="#1a0f22"/>' +
+    '</linearGradient></defs>' +
+    '<rect width="400" height="400" fill="url(#g)"/>' +
+    '<text x="200" y="245" font-size="140" text-anchor="middle" fill="#ff4d4d" font-family="sans-serif">♪</text>' +
+    '</svg>'
+  );
+
+  // ============ ЦВЕТА ИЗ ОБЛОЖКИ ============
+  function rgbToHsl(r, g, b){
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h, s, l = (max + min) / 2;
+    if (max === min){ h = s = 0; }
+    else {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max){
+        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+        case g: h = (b - r) / d + 2; break;
+        case b: h = (r - g) / d + 4; break;
+      }
+      h /= 6;
+    }
+    return [h * 360, s * 100, l * 100];
+  }
+  function hslToRgb(h, s, l){
+    h = ((h % 360) + 360) % 360;
+    s /= 100; l /= 100;
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+    const m = l - c / 2;
+    let r, g, b;
+    if (h < 60){ [r, g, b] = [c, x, 0]; }
+    else if (h < 120){ [r, g, b] = [x, c, 0]; }
+    else if (h < 180){ [r, g, b] = [0, c, x]; }
+    else if (h < 240){ [r, g, b] = [0, x, c]; }
+    else if (h < 300){ [r, g, b] = [x, 0, c]; }
+    else { [r, g, b] = [c, 0, x]; }
+    return [
+      Math.round((r + m) * 255),
+      Math.round((g + m) * 255),
+      Math.round((b + m) * 255)
+    ];
+  }
+  function clamp(v, min, max){ return Math.min(max, Math.max(min, v)); }
+
+  function extractAccentFromImage(imgSrc, callback){
+    if (!imgSrc){ callback(null); return; }
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const c = document.createElement('canvas');
+        c.width = 64; c.height = 64;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0, 64, 64);
+        const data = ctx.getImageData(0, 0, 64, 64).data;
+        const clusters = [];
+        for (let i = 0; i < data.length; i += 4){
+          const r = data[i], g = data[i+1], b = data[i+2];
+          const bright = (r + g + b) / 3;
+          if (bright < 30 || bright > 235) continue;
+          const [h, s, l] = rgbToHsl(r, g, b);
+          if (s < 15) continue;
+          let found = false;
+          for (const cl of clusters){
+            const dh = Math.min(Math.abs(cl.h - h), 360 - Math.abs(cl.h - h));
+            if (dh < 25){
+              cl.count++;
+              cl.r += r; cl.g += g; cl.b += b;
+              cl.s += s; cl.l += l;
+              found = true;
+              break;
+            }
+          }
+          if (!found) clusters.push({ h, s, l, r, g, b, count: 1 });
+        }
+        if (clusters.length === 0){ callback(null); return; }
+        clusters.forEach(cl => {
+          cl.r /= cl.count; cl.g /= cl.count; cl.b /= cl.count;
+          cl.s /= cl.count; cl.l /= cl.count;
+        });
+        clusters.sort((a, b) => (b.count * b.s) - (a.count * a.s));
+        const winner = clusters[0];
+        callback({
+          rgb: [Math.round(winner.r), Math.round(winner.g), Math.round(winner.b)],
+          hsl: [winner.h, winner.s, winner.l]
+        });
+      } catch (e){
+        console.warn('extractAccent error:', e);
+        callback(null);
+      }
+    };
+    img.onerror = () => callback(null);
+    img.src = imgSrc;
+  }
+
+  function applyAccent(accentData){
+    let baseRGB, baseHSL;
+    if (!accentData){
+      baseRGB = FALLBACK_ACCENT;
+      baseHSL = rgbToHsl(baseRGB[0], baseRGB[1], baseRGB[2]);
+    } else {
+      baseRGB = accentData.rgb;
+      baseHSL = accentData.hsl;
+    }
+    const [h, s, l] = baseHSL;
+    const newS = clamp(s * 1.3 + 20, 40, 95);
+    const newL = clamp(l, 45, 65);
+    const accent   = hslToRgb(h, newS, newL);
+    const accent2  = hslToRgb(h, newS * 0.9, clamp(newL + 15, 60, 80));
+    const accentBr = hslToRgb(h, newS, clamp(newL + 8, 55, 72));
+    const accentDp = hslToRgb(h, newS, clamp(newL - 18, 28, 45));
+    const root = document.documentElement;
+    root.style.setProperty('--accent', `rgb(${accent[0]},${accent[1]},${accent[2]})`);
+    root.style.setProperty('--accent-2', `rgb(${accent2[0]},${accent2[1]},${accent2[2]})`);
+    root.style.setProperty('--accent-bright', `rgb(${accentBr[0]},${accentBr[1]},${accentBr[2]})`);
+    root.style.setProperty('--accent-deep', `rgb(${accentDp[0]},${accentDp[1]},${accentDp[2]})`);
+    root.style.setProperty('--accent-soft', `rgba(${accent[0]},${accent[1]},${accent[2]},0.25)`);
+    root.style.setProperty('--accent-fade', `rgba(${accent[0]},${accent[1]},${accent[2]},0.15)`);
+    root.style.setProperty('--accent-glow', `rgba(${accent[0]},${accent[1]},${accent[2]},0.5)`);
+    root.style.setProperty('--bg-tint', `rgba(${accent[0]},${accent[1]},${accent[2]},0.06)`);
+    const bgBase = hslToRgb(h, clamp(newS * 0.5, 15, 30), 4);
+    root.style.setProperty('--bg-base', `rgb(${bgBase[0]},${bgBase[1]},${bgBase[2]})`);
+  }
+
+  // ============ ФОН ============
+  const bgA = document.getElementById('bgLayerA');
+  const bgB = document.getElementById('bgLayerB');
+  let activeLayer = null;
+  let inactiveLayer = bgA;
+
+  function setBackground(src){
+    // Защита от null
+    if (!inactiveLayer) inactiveLayer = bgA;
+    if (!inactiveLayer) return;
+    inactiveLayer.style.backgroundImage = src ? `url("${src}")` : 'none';
+    requestAnimationFrame(() => {
+      if (activeLayer) activeLayer.classList.remove('active');
+      if (inactiveLayer) inactiveLayer.classList.add('active');
+      const tmp = activeLayer;
+      activeLayer = inactiveLayer;
+      inactiveLayer = tmp;
+      if (!inactiveLayer) inactiveLayer = bgB;
+    });
+  }
+
+  // ============ АУДИО ============
+  const audio = new Audio();
+  audio.volume = 0.8;
+  audio.preload = "auto";
+
+  const tracks = [];
+  let currentIndex = -1;
+  let isPlaying = false;
+  let objectUrls = [];
+
+  let shuffleMode = false;
+  let repeatMode = 0;
+  let shuffleQueue = [];
+  let playedHistory = [];
+  let playToken = 0;
+
+  let audioCtx = null;
+  let sourceNode = null;
+  let analyser = null;
+  let eqFilters = [];
+  let freqData = null;
+  let usingAnalyser = false;
+
+  const EQ_FREQS = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+  const EQ_LABELS = ['32', '64', '125', '250', '500', '1k', '2k', '4k', '8k', '16k'];
+
+  const $ = id => document.getElementById(id);
+  const coverArt    = $('coverArt');
+  const coverBox    = $('coverBox');
+  const trackNameEl = $('trackName');
+  const artistEl    = $('artistName');
+  const curTimeEl   = $('currentTime');
+  const durEl       = $('duration');
+  const progress    = $('progressSlider');
+  const playBtn     = $('playBtn');
+  const playIcon    = $('playIcon');
+  const prevBtn     = $('prevBtn');
+  const nextBtn     = $('nextBtn');
+  const volumeSlider= $('volumeSlider');
+  const volIcon     = $('volIcon');
+  const playlistBody= $('playlistBody');
+  const fileInput   = $('fileInput');
+  const lyricsFileInput = $('lyricsFileInput');
+  const clearBtn    = $('clearBtn');
+  const toastEl     = $('toast');
+  const eqPresetsEl = $('eqPresets');
+  const eqBandsEl   = $('eqBands');
+  const lyricsContent = $('lyricsContent');
+  const lyricsStatus  = $('lyricsStatus');
+  const lyricsFontBtn = $('lyricsFontBtn');
+  const lyricsFindBtn = $('lyricsFindBtn');
+  const shuffleBtn    = $('shuffleBtn');
+  const repeatBtn     = $('repeatBtn');
+  const repeatIcon    = $('repeatIcon');
+
+  coverArt.src = DEFAULT_COVER;
+  // Фон сразу не устанавливаем — поставим когда будет трек
+
+  let fontMode = 0;
+
+  function updateSliderFill(el, percent){
+    if (el) el.style.setProperty('--fill', percent + '%');
+  }
+  function fmt(sec){
+    if (!sec || isNaN(sec) || !isFinite(sec)) return '0:00';
+    const m = Math.floor(sec/60), s = Math.floor(sec%60);
+    return `${m}:${s<10?'0':''}${s}`;
+  }
+  function toast(msg, isError=false){
+    toastEl.textContent = msg;
+    toastEl.className = 'toast show' + (isError?' error':'');
+    clearTimeout(toastEl._t);
+    toastEl._t = setTimeout(()=>toastEl.className='toast', 2500);
+  }
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // ============ ПАНЕЛИ ============
+  document.querySelectorAll('.panel-close').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.close;
+      document.getElementById(id).classList.remove('open');
+    });
+  });
+  function togglePanel(id){
+    const panel = document.getElementById(id);
+    const wasOpen = panel.classList.contains('open');
+    document.querySelectorAll('.side-panel').forEach(p => p.classList.remove('open'));
+    if (!wasOpen) panel.classList.add('open');
+  }
+  $('openLyricsBtn').addEventListener('click', () => togglePanel('panelLyrics'));
+  $('openPlaylistBtn').addEventListener('click', () => togglePanel('panelPlaylist'));
+  $('openSettingsBtn').addEventListener('click', () => {
+    initAudioContext();
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    togglePanel('panelSettings');
+  });
+
+  // ============ WEB AUDIO ============
+  function initAudioContext(){
+    if (audioCtx) return;
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      sourceNode = audioCtx.createMediaElementSource(audio);
+      eqFilters = EQ_FREQS.map((freq, i) => {
+        const f = audioCtx.createBiquadFilter();
+        if (i === 0) f.type = 'lowshelf';
+        else if (i === EQ_FREQS.length - 1) f.type = 'highshelf';
+        else f.type = 'peaking';
+        f.frequency.value = freq;
+        f.Q.value = 1.0;
+        f.gain.value = 0;
+        return f;
+      });
+      let chain = sourceNode;
+      eqFilters.forEach(f => { chain.connect(f); chain = f; });
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 128;
+      analyser.smoothingTimeConstant = 0.85;
+      freqData = new Uint8Array(analyser.frequencyBinCount);
+      chain.connect(analyser);
+      analyser.connect(audioCtx.destination);
+      usingAnalyser = true;
+    } catch (e){
+      console.warn('Web Audio API недоступен:', e);
+      usingAnalyser = false;
+    }
+  }
+
+  // ============ EQ ============
+  function buildEQPanel(){
+    const presets = {
+      'Flat':  [0,0,0,0,0,0,0,0,0,0],
+      'Bass':  [8,7,5,3,0,0,0,0,0,0],
+      'Rock':  [5,4,2,0,-1,-1,1,3,4,5],
+      'Pop':   [-1,0,2,4,4,2,0,-1,-1,-1],
+      'Jazz':  [3,2,1,2,-1,-1,0,1,2,3],
+      'Vocal': [-2,-1,0,2,4,4,3,1,0,-1]
+    };
+    Object.keys(presets).forEach(name => {
+      const btn = document.createElement('button');
+      btn.className = 'eq-preset' + (name === 'Flat' ? ' active' : '');
+      btn.textContent = name;
+      btn.addEventListener('click', () => applyPreset(presets[name], btn));
+      eqPresetsEl.appendChild(btn);
+    });
+    EQ_FREQS.forEach((freq, i) => {
+      const band = document.createElement('div');
+      band.className = 'eq-band';
+      band.innerHTML = `
+        <div class="value" id="eqVal${i}">0</div>
+        <div class="eq-slider-wrap">
+          <input type="range" id="eqSlider${i}" min="-12" max="12" step="0.5" value="0">
+        </div>
+        <div class="label">${EQ_LABELS[i]}</div>
+      `;
+      eqBandsEl.appendChild(band);
+      const slider = band.querySelector('input');
+      const valEl = band.querySelector('.value');
+      slider.addEventListener('input', e => {
+        const v = parseFloat(e.target.value);
+        valEl.textContent = v > 0 ? '+' + v : v;
+        setEqBand(i, v);
+        document.querySelectorAll('.eq-preset').forEach(p => p.classList.remove('active'));
+      });
+    });
+  }
+  function setEqBand(index, gain){
+    if (eqFilters[index]) eqFilters[index].gain.value = gain;
+  }
+  function applyPreset(gains, activeBtn){
+    document.querySelectorAll('.eq-preset').forEach(p => p.classList.remove('active'));
+    if (activeBtn) activeBtn.classList.add('active');
+    gains.forEach((g, i) => {
+      const slider = document.getElementById('eqSlider' + i);
+      const valEl = document.getElementById('eqVal' + i);
+      if (slider){
+        slider.value = g;
+        valEl.textContent = g > 0 ? '+' + g : g;
+      }
+      setEqBand(i, g);
+    });
+  }
+  buildEQPanel();
+
+  // ============ ТЕКСТ ============
+  function setLyricsStatus(text, cls=''){
+    lyricsStatus.textContent = text || '';
+    lyricsStatus.className = 'lyrics-status ' + cls;
+  }
+  function setLyrics(text){
+    text = (text || '').trim();
+    if (!text){
+      lyricsContent.textContent = 'Текст не найден. Нажми 🔍, чтобы поискать в интернете, или загрузи свой файл.';
+      lyricsContent.classList.add('empty');
+      return;
+    }
+    let clean = text.replace(/\[\d{1,2}:\d{2}(?:\.\d{1,3})?\]/g, '').trim();
+    clean = clean.replace(/^\[[a-zA-Z]+:.*?\]\s*$/gm, '').trim();
+    if (!clean) clean = text;
+    lyricsContent.textContent = clean;
+    lyricsContent.classList.remove('empty');
+    lyricsContent.scrollTop = 0;
+  }
+  lyricsFontBtn.addEventListener('click', () => {
+    fontMode = (fontMode + 1) % 3;
+    lyricsContent.classList.remove('font-large', 'font-xlarge');
+    if (fontMode === 1) lyricsContent.classList.add('font-large');
+    else if (fontMode === 2) lyricsContent.classList.add('font-xlarge');
+    lyricsFontBtn.textContent = fontMode === 0 ? 'A' : (fontMode === 1 ? 'A+' : 'A++');
+  });
+
+  const lyricsCache = new Map();
+  async function fetchLyricsFromLRCLIB(artist, title){
+    if (!LRCLIB_ENABLED) return null;
+    if (!artist || !title) return null;
+    const cacheKey = `${artist.toLowerCase()}|${title.toLowerCase()}`;
+    if (lyricsCache.has(cacheKey)) return lyricsCache.get(cacheKey);
+    const url = `https://lrclib.net/api/get?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(title)}`;
+    try {
+      const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      if (!res.ok){
+        if (res.status === 404) lyricsCache.set(cacheKey, null);
+        return null;
+      }
+      const data = await res.json();
+      const text = data.syncedLyrics || data.plainLyrics || null;
+      lyricsCache.set(cacheKey, text);
+      return text;
+    } catch (err){
+      console.warn('LRCLIB fetch error:', err);
+      return null;
+    }
+  }
+  async function searchLyricsForCurrentTrack(force=false){
+    const t = tracks[currentIndex];
+    if (!t) return;
+    if (t.lyrics && t.lyrics.trim() && !force) return;
+    if (!t.artist || !t.title){
+      setLyricsStatus('нет данных', 'notfound');
+      return;
+    }
+    setLyricsStatus('поиск...', 'loading');
+    lyricsContent.textContent = 'Ищу текст в интернете...';
+    lyricsContent.classList.add('empty');
+    const found = await fetchLyricsFromLRCLIB(t.artist, t.title);
+    if (tracks[currentIndex] !== t) return;
+    if (found){
+      t.lyrics = found;
+      setLyrics(found);
+      setLyricsStatus('✓ найден', 'found');
+      renderPlaylist();
+    } else {
+      setLyrics('');
+      setLyricsStatus('не найден', 'notfound');
+    }
+  }
+  lyricsFindBtn.addEventListener('click', () => {
+    if (currentIndex === -1){ toast('Сначала выберите трек', true); return; }
+    searchLyricsForCurrentTrack(true);
+  });
+
+  // ============ SHUFFLE / REPEAT ============
+  function rebuildShuffleQueue(){
+    shuffleQueue = [];
+    for (let i = 0; i < tracks.length; i++){
+      if (i !== currentIndex) shuffleQueue.push(i);
+    }
+    for (let i = shuffleQueue.length - 1; i > 0; i--){
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffleQueue[i], shuffleQueue[j]] = [shuffleQueue[j], shuffleQueue[i]];
+    }
+    playedHistory = currentIndex >= 0 ? [currentIndex] : [];
+  }
+  shuffleBtn.addEventListener('click', () => {
+    shuffleMode = !shuffleMode;
+    shuffleBtn.classList.toggle('active', shuffleMode);
+    if (shuffleMode){
+      rebuildShuffleQueue();
+      toast('🔀 Случайный порядок включён');
+    } else {
+      shuffleQueue = [];
+      playedHistory = [];
+      toast('Случайный порядок выключен');
+    }
+  });
+
+  function updateRepeatUI(){
+    repeatBtn.classList.toggle('active', repeatMode > 0);
+    if (repeatMode === 2){
+      repeatIcon.innerHTML = '<path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4zM13 15V9h-1l-2 1v1h1.5v4H13z"/>';
+    } else {
+      repeatIcon.innerHTML = '<path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/>';
+    }
+  }
+  repeatBtn.addEventListener('click', () => {
+    repeatMode = (repeatMode + 1) % 3;
+    updateRepeatUI();
+    if (repeatMode === 0) toast('Повтор выключен');
+    else if (repeatMode === 1) toast('🔁 Повтор всего плейлиста');
+    else toast('🔂 Повтор одного трека');
+  });
+
+  function getNextIndex(auto=false){
+    if (tracks.length === 0) return -1;
+    if (tracks.length === 1) return 0;
+    if (shuffleMode){
+      if (shuffleQueue.length === 0){
+        if (repeatMode === 1 || (auto && repeatMode === 0) || !auto) rebuildShuffleQueue();
+        else return -1;
+      }
+      if (shuffleQueue.length === 0) return -1;
+      const next = shuffleQueue.shift();
+      playedHistory.push(next);
+      return next;
+    }
+    const next = currentIndex + 1;
+    if (next < tracks.length) return next;
+    if (repeatMode === 1) return 0;
+    if (auto && repeatMode === 0) return -1;
+    return 0;
+  }
+  function getPrevIndex(){
+    if (tracks.length === 0) return -1;
+    if (tracks.length === 1) return 0;
+    if (shuffleMode){
+      if (playedHistory.length > 1){
+        playedHistory.pop();
+        const prev = playedHistory[playedHistory.length - 1];
+        shuffleQueue.push(currentIndex);
+        return prev;
+      }
+      return currentIndex;
+    }
+    const prev = currentIndex - 1;
+    if (prev >= 0) return prev;
+    return tracks.length - 1;
+  }
+
+  // ============ ПЛЕЙЛИСТ ============
+  function renderPlaylist(){
+    playlistBody.innerHTML = '';
+    if (tracks.length === 0){
+      playlistBody.innerHTML = '<div class="empty-msg">Плейлист пуст. Загрузите MP3-файлы.</div>';
+      return;
+    }
+    tracks.forEach((t, i) => {
+      const item = document.createElement('div');
+      item.className = 'playlist-item' + (i === currentIndex ? ' active' : '');
+      const hasLyrics = !!(t.lyrics && t.lyrics.trim());
+      item.innerHTML = `
+        <div class="meta">
+          <div class="title">
+            ${escapeHtml(t.title || t.name)}
+            ${hasLyrics ? '<span class="lyric-badge">ТЕКСТ</span>' : ''}
+          </div>
+          <div class="artist">${escapeHtml(t.artist || 'Неизвестный исполнитель')}</div>
+        </div>
+        <button class="remove-track" title="Удалить">✕</button>
+      `;
+      item.addEventListener('click', (e) => {
+        if (e.target.classList.contains('remove-track')) return;
+        if (i === currentIndex) {
+          togglePlay();
+        } else {
+          playTrackByIndex(i);
+        }
+      });
+      item.querySelector('.remove-track').addEventListener('click', (e) => {
+        e.stopPropagation(); removeTrack(i);
+      });
+      playlistBody.appendChild(item);
+    });
+  }
+
+  // ============ ВОСПРОИЗВЕДЕНИЕ ============
+  function playTrackByIndex(i){
+    const t = tracks[i];
+    if (!t) return;
+
+    console.log('▶ playTrackByIndex:', i, t.title || t.name);
+
+    currentIndex = i;
+    playToken++;
+    const myToken = playToken;
+
+    try { audio.pause(); } catch(e){}
+    audio.src = t.src;
+
+    // UI
+    const cover = t.cover || DEFAULT_COVER;
+    coverArt.src = cover;
+    setBackground(cover);
+    extractAccentFromImage(cover, applyAccent);
+    trackNameEl.textContent = t.title || t.name;
+    artistEl.textContent = t.artist || 'Неизвестный исполнитель';
+    progress.value = 0;
+    updateSliderFill(progress, 0);
+    curTimeEl.textContent = '0:00';
+    durEl.textContent = '0:00';
+
+    if (t.lyrics && t.lyrics.trim()){
+      setLyrics(t.lyrics);
+      setLyricsStatus('✓ вшит в файл', 'found');
+    } else {
+      setLyrics('');
+      setLyricsStatus('');
+    }
+    renderPlaylist();
+
+    initAudioContext();
+    if (audioCtx && audioCtx.state === 'suspended'){
+      audioCtx.resume().catch(()=>{});
+    }
+
+    const doPlay = () => {
+      if (myToken !== playToken) return;
+      audio.play().then(() => {
+        if (myToken !== playToken) return;
+        isPlaying = true;
+        playIcon.innerHTML = '<path d="M6 5h4v14H6zm8 0h4v14h-4z"/>';
+        coverBox.classList.add('playing');
+        if (t && (!t.lyrics || !t.lyrics.trim())){
+          searchLyricsForCurrentTrack(false);
+        }
+      }).catch(err => {
+        console.warn('play error:', err);
+        if (myToken !== playToken) return;
+        const onReady = () => {
+          audio.removeEventListener('canplay', onReady);
+          audio.removeEventListener('loadeddata', onReady);
+          if (myToken !== playToken) return;
+          audio.play().then(() => {
+            isPlaying = true;
+            playIcon.innerHTML = '<path d="M6 5h4v14H6zm8 0h4v14h-4z"/>';
+            coverBox.classList.add('playing');
+          }).catch(err2 => {
+            console.warn('play retry failed:', err2);
+            isPlaying = false;
+            playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+            coverBox.classList.remove('playing');
+          });
+        };
+        audio.addEventListener('canplay', onReady, { once: true });
+        audio.addEventListener('loadeddata', onReady, { once: true });
+        setTimeout(onReady, 500);
+      });
+    };
+
+    if (audio.readyState >= 2){
+      doPlay();
+    } else {
+      const onReady = () => {
+        audio.removeEventListener('canplay', onReady);
+        audio.removeEventListener('loadeddata', onReady);
+        doPlay();
+      };
+      audio.addEventListener('canplay', onReady, { once: true });
+      audio.addEventListener('loadeddata', onReady, { once: true });
+      setTimeout(onReady, 1000);
+    }
+  }
+
+  function pauseTrack(){
+    audio.pause();
+    isPlaying = false;
+    playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+    coverBox.classList.remove('playing');
+  }
+
+  function togglePlay(){
+    if (isPlaying){
+      pauseTrack();
+      return;
+    }
+    if (currentIndex === -1 && tracks.length > 0){
+      playTrackByIndex(0);
+      return;
+    }
+    if (currentIndex === -1){
+      toast('Сначала добавьте треки', true);
+      return;
+    }
+    if (audio.src && audio.currentTime > 0 && audio.readyState >= 2){
+      audio.play().then(() => {
+        isPlaying = true;
+        playIcon.innerHTML = '<path d="M6 5h4v14H6zm8 0h4v14h-4z"/>';
+        coverBox.classList.add('playing');
+      }).catch(err => {
+        console.warn('resume error:', err);
+        playTrackByIndex(currentIndex);
+      });
+    } else {
+      playTrackByIndex(currentIndex);
+    }
+  }
+
+  function nextTrack(auto=false){
+    const next = getNextIndex(auto);
+    if (next === -1){
+      pauseTrack();
+      audio.currentTime = 0;
+      return;
+    }
+    playTrackByIndex(next);
+  }
+
+  function prevTrack(){
+    if (audio.currentTime > 3){ audio.currentTime = 0; return; }
+    const prev = getPrevIndex();
+    if (prev === -1) return;
+    playTrackByIndex(prev);
+  }
+
+  function removeTrack(i){
+    const wasCurrent = i === currentIndex;
+    const t = tracks[i];
+    if (t.isLocal && t.src.startsWith('blob:')){
+      try { URL.revokeObjectURL(t.src); } catch(e){}
+    }
+    tracks.splice(i, 1);
+    if (shuffleMode){
+      shuffleQueue = shuffleQueue.filter(idx => idx !== i).map(idx => idx > i ? idx - 1 : idx);
+      playedHistory = playedHistory.filter(idx => idx !== i).map(idx => idx > i ? idx - 1 : idx);
+    }
+    if (tracks.length === 0){
+      audio.pause(); audio.removeAttribute('src'); audio.load();
+      currentIndex = -1; isPlaying = false;
+      playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+      trackNameEl.textContent = '';
+      artistEl.textContent = '';
+      coverArt.src = DEFAULT_COVER;
+      setBackground(null);
+      extractAccentFromImage(DEFAULT_COVER, applyAccent);
+      setLyrics('');
+      setLyricsStatus('');
+      progress.value = 0; updateSliderFill(progress, 0);
+      curTimeEl.textContent = '0:00'; durEl.textContent = '0:00';
+      coverBox.classList.remove('playing');
+      shuffleQueue = []; playedHistory = [];
+    } else if (wasCurrent){
+      currentIndex = i >= tracks.length ? 0 : i;
+      playTrackByIndex(currentIndex);
+    } else if (i < currentIndex) currentIndex--;
+    renderPlaylist();
+  }
+
+  // ============ СОБЫТИЯ АУДИО ============
+  audio.addEventListener('timeupdate', () => {
+    if (audio.duration && isFinite(audio.duration)){
+      const pct = (audio.currentTime / audio.duration) * 100;
+      progress.value = pct;
+      updateSliderFill(progress, pct);
+      curTimeEl.textContent = fmt(audio.currentTime);
+    }
+  });
+  audio.addEventListener('loadedmetadata', () => { durEl.textContent = fmt(audio.duration); });
+  audio.addEventListener('ended', () => {
+    if (repeatMode === 2){
+      audio.currentTime = 0;
+      audio.play().catch(()=>{});
+      return;
+    }
+    nextTrack(true);
+  });
+  audio.addEventListener('error', () => {
+    if (!audio.src) return;
+    toast('Ошибка загрузки трека', true);
+  });
+  progress.addEventListener('input', e => {
+    const pct = parseFloat(e.target.value);
+    updateSliderFill(progress, pct);
+    if (audio.duration && isFinite(audio.duration)){
+      audio.currentTime = (pct/100) * audio.duration;
+    }
+  });
+
+  // ============ ГРОМКОСТЬ ============
+  function updateVolIcon(v){
+    if (v === 0){
+      volIcon.innerHTML = '<path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>';
+    } else if (v < 0.4){
+      volIcon.innerHTML = '<path d="M7 9v6h4l5 5V4l-5 5H7z"/>';
+    } else if (v < 0.8){
+      volIcon.innerHTML = '<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>';
+    } else {
+      volIcon.innerHTML = '<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>';
+    }
+  }
+  volumeSlider.addEventListener('input', e => {
+    const v = parseFloat(e.target.value);
+    audio.volume = v;
+    updateVolIcon(v);
+    updateSliderFill(volumeSlider, v * 100);
+  });
+  $('volumeIcon').addEventListener('click', () => {
+    if (audio.volume > 0){
+      audio.dataset.prevVol = audio.volume;
+      audio.volume = 0; volumeSlider.value = 0;
+      updateSliderFill(volumeSlider, 0);
+      updateVolIcon(0);
+    } else {
+      const v = parseFloat(audio.dataset.prevVol) || 0.8;
+      audio.volume = v; volumeSlider.value = v;
+      updateSliderFill(volumeSlider, v * 100);
+      updateVolIcon(v);
+    }
+  });
+
+  // ============ ЗАГРУЗКА MP3 ============
+  fileInput.addEventListener('change', async e => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    let added = 0, withCover = 0, withLyrics = 0;
+    const wasEmpty = tracks.length === 0;
+    for (const file of files){
+      if (!file.type.startsWith('audio/')){
+        toast(`Файл "${file.name}" не аудио`, true);
+        continue;
+      }
+      const url = URL.createObjectURL(file);
+      objectUrls.push(url);
+
+      let coverUrl = DEFAULT_COVER;
+      let lyrics = '';
+      let id3Artist = '';
+      let id3Title = '';
+      try {
+        const tags = await parseID3(file);
+        if (tags.cover) coverUrl = tags.cover;
+        if (tags.lyrics) lyrics = tags.lyrics;
+        if (tags.artist) id3Artist = tags.artist;
+        if (tags.title) id3Title = tags.title;
+      } catch (err){ console.warn('ID3 error:', err); }
+
+      const baseName = file.name.replace(/\.[^.]+$/, '');
+      let fileArtist = '';
+      let fileTitle = baseName;
+      const dashMatch = baseName.match(/^(.+?)\s*[-–—]\s*(.+)$/);
+      if (dashMatch){
+        fileArtist = dashMatch[1].trim();
+        fileTitle = dashMatch[2].trim();
+      }
+      const finalArtist = id3Artist || fileArtist || '';
+      const finalTitle  = id3Title  || fileTitle  || baseName;
+
+      if (coverUrl !== DEFAULT_COVER) withCover++;
+      if (lyrics) withLyrics++;
+
+      tracks.push({
+        name: baseName,
+        title: finalTitle,
+        artist: finalArtist || 'Неизвестный исполнитель',
+        src: url,
+        cover: coverUrl,
+        lyrics: lyrics,
+        isLocal: true
+      });
+      added++;
+    }
+    fileInput.value = '';
+    renderPlaylist();
+    if (shuffleMode) rebuildShuffleQueue();
+    if (added > 0){
+      let msg = `Добавлено: ${added}`;
+      if (withCover) msg += ` • обл.: ${withCover}`;
+      if (withLyrics) msg += ` • текст: ${withLyrics}`;
+      toast(msg);
+
+      if (wasEmpty && tracks.length > 0){
+        playTrackByIndex(0);
+      } else if (currentIndex === -1 && tracks.length > 0){
+        currentIndex = 0;
+        renderPlaylist();
+      }
+    }
+  });
+
+  lyricsFileInput.addEventListener('change', async e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (currentIndex === -1){
+      toast('Сначала выберите трек', true);
+      lyricsFileInput.value = '';
+      return;
+    }
+    try {
+      const text = await file.text();
+      tracks[currentIndex].lyrics = text;
+      setLyrics(text);
+      setLyricsStatus('✓ загружен вручную', 'found');
+      renderPlaylist();
+      toast(`Текст "${file.name}" загружен`);
+    } catch (err){
+      toast('Не удалось прочитать файл', true);
+    }
+    lyricsFileInput.value = '';
+  });
+
+  // ============ ID3 ============
+  function parseID3(file){
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      const chunk = file.slice(0, 2 * 1024 * 1024);
+      reader.onload = (e) => {
+        const result = { cover: null, lyrics: '', artist: '', title: '' };
+        try {
+          const buffer = e.target.result;
+          const view = new DataView(buffer);
+          if (view.getUint8(0) !== 0x49 || view.getUint8(1) !== 0x44 || view.getUint8(2) !== 0x33){
+            return resolve(result);
+          }
+          const version = view.getUint8(3);
+          const flags = view.getUint8(5);
+          const size = ((view.getUint8(6) & 0x7F) << 21) |
+                       ((view.getUint8(7) & 0x7F) << 14) |
+                       ((view.getUint8(8) & 0x7F) << 7)  |
+                       (view.getUint8(9) & 0x7F);
+          let offset = 10;
+          if (flags & 0x40){
+            const extSize = version === 4
+              ? ((view.getUint8(10) & 0x7F) << 21) | ((view.getUint8(11) & 0x7F) << 14) | ((view.getUint8(12) & 0x7F) << 7) | (view.getUint8(13) & 0x7F)
+              : view.getUint32(10);
+            offset += extSize;
+          }
+          const end = 10 + size;
+          while (offset < end && offset < buffer.byteLength - 10){
+            const fId = String.fromCharCode(
+              view.getUint8(offset), view.getUint8(offset+1),
+              view.getUint8(offset+2), view.getUint8(offset+3)
+            );
+            if (!/^[A-Z0-9]{4}$/.test(fId)) break;
+            const fSize = version === 4
+              ? ((view.getUint8(offset+4) & 0x7F) << 21) | ((view.getUint8(offset+5) & 0x7F) << 14) | ((view.getUint8(offset+6) & 0x7F) << 7) | (view.getUint8(offset+7) & 0x7F)
+              : view.getUint32(offset+4);
+            if (fSize <= 0 || offset + 10 + fSize > buffer.byteLength) break;
+
+            if (fId === 'APIC' && !result.cover){
+              let p = offset + 10;
+              const encoding = view.getUint8(p); p++;
+              let mime = '';
+              while (p < offset + 10 + fSize && view.getUint8(p) !== 0){
+                mime += String.fromCharCode(view.getUint8(p)); p++;
+              }
+              p++; p++;
+              if (encoding === 0 || encoding === 3){
+                while (p < offset + 10 + fSize && view.getUint8(p) !== 0) p++;
+                p++;
+              } else {
+                while (p < offset + 10 + fSize - 1){
+                  if (view.getUint8(p) === 0 && view.getUint8(p+1) === 0){ p += 2; break; }
+                  p += 2;
+                }
+              }
+              const imgData = buffer.slice(p, offset + 10 + fSize);
+              const blob = new Blob([imgData], { type: mime || 'image/jpeg' });
+              result.cover = URL.createObjectURL(blob);
+              objectUrls.push(result.cover);
+            }
+
+            if (fId === 'USLT' && !result.lyrics){
+              let p = offset + 10;
+              const encoding = view.getUint8(p); p++;
+              p += 3;
+              if (encoding === 0 || encoding === 3){
+                while (p < offset + 10 + fSize && view.getUint8(p) !== 0) p++;
+                p++;
+              } else {
+                while (p < offset + 10 + fSize - 1){
+                  if (view.getUint8(p) === 0 && view.getUint8(p+1) === 0){ p += 2; break; }
+                  p += 2;
+                }
+              }
+              const textBytes = buffer.slice(p, offset + 10 + fSize);
+              let text = '';
+              if (encoding === 0) text = new TextDecoder('iso-8859-1').decode(textBytes);
+              else if (encoding === 1){
+                text = new TextDecoder('utf-16le').decode(textBytes);
+                if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+              }
+              else if (encoding === 2) text = new TextDecoder('utf-16be').decode(textBytes);
+              else text = new TextDecoder('utf-8').decode(textBytes);
+              result.lyrics = text.replace(/\0/g, '').trim();
+            }
+
+            if (fId === 'TPE1' && !result.artist) result.artist = decodeTextFrame(view, buffer, offset, fSize);
+            if (fId === 'TIT2' && !result.title)  result.title  = decodeTextFrame(view, buffer, offset, fSize);
+
+            offset += 10 + fSize;
+          }
+          resolve(result);
+        } catch (err){
+          console.warn('parseID3 error:', err);
+          resolve(result);
+        }
+      };
+      reader.onerror = () => resolve({ cover: null, lyrics: '', artist: '', title: '' });
+      reader.readAsArrayBuffer(chunk);
+    });
+  }
+
+  function decodeTextFrame(view, buffer, offset, fSize){
+    try {
+      let p = offset + 10;
+      const encoding = view.getUint8(p); p++;
+      const end = offset + 10 + fSize;
+      const bytes = buffer.slice(p, end);
+      let text = '';
+      if (encoding === 0) text = new TextDecoder('iso-8859-1').decode(bytes);
+      else if (encoding === 1){
+        text = new TextDecoder('utf-16le').decode(bytes);
+        if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+      }
+      else if (encoding === 2) text = new TextDecoder('utf-16be').decode(bytes);
+      else text = new TextDecoder('utf-8').decode(bytes);
+      return text.replace(/\0.*$/s, '').trim();
+    } catch (e){ return ''; }
+  }
+
+  // ============ ОЧИСТКА ============
+  clearBtn.addEventListener('click', () => {
+    if (tracks.length === 0){ toast('Плейлист уже пуст'); return; }
+    if (!confirm('Удалить все треки из плейлиста?')) return;
+    audio.pause(); audio.removeAttribute('src'); audio.load();
+    objectUrls.forEach(u => { try { URL.revokeObjectURL(u); } catch(e){} });
+    objectUrls = []; tracks.length = 0; currentIndex = -1; isPlaying = false;
+    shuffleQueue = []; playedHistory = [];
+    playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+    trackNameEl.textContent = '';
+    artistEl.textContent = '';
+    coverArt.src = DEFAULT_COVER;
+    setBackground(null);
+    extractAccentFromImage(DEFAULT_COVER, applyAccent);
+    setLyrics('');
+    setLyricsStatus('');
+    progress.value = 0; updateSliderFill(progress, 0);
+    curTimeEl.textContent = '0:00'; durEl.textContent = '0:00';
+    coverBox.classList.remove('playing');
+    renderPlaylist();
+    toast('Плейлист очищен');
+  });
+
+  // ============ КНОПКИ ============
+  playBtn.addEventListener('click', togglePlay);
+  nextBtn.addEventListener('click', () => nextTrack(false));
+  prevBtn.addEventListener('click', prevTrack);
+
+  document.addEventListener('keydown', e => {
+    const tag = document.activeElement.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (e.code === 'Space'){ e.preventDefault(); togglePlay(); }
+    if (e.code === 'ArrowRight') nextTrack(false);
+    if (e.code === 'ArrowLeft') prevTrack();
+    if (e.code === 'Escape'){
+      document.querySelectorAll('.side-panel').forEach(p => p.classList.remove('open'));
+    }
+  });
+
+  // ============ INIT ============
+  renderPlaylist();
+  updateVolIcon(0.8);
+  updateRepeatUI();
+  audio.volume = 0.8;
+  updateSliderFill(volumeSlider, 80);
+  extractAccentFromImage(DEFAULT_COVER, applyAccent);
+
+  console.log('=== Music Player READY ===');
+})();
+</script>
+</body>
+</html>
