@@ -1,0 +1,46 @@
+{
+  "name": "music-player",
+  "version": "1.0.0",
+  "description": "Local music player",
+  "main": "main.js",
+  "author": "Your Name",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win"
+  },
+  "dependencies": {
+    "yt-search": "^2.13.1"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.yourname.musicplayer",
+    "productName": "Music Player",
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html"
+    ],
+    "extraResources": [
+      {
+        "from": "binaries",
+        "to": "binaries"
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "directories": {
+      "output": "dist"
+    }
+  }
+}
