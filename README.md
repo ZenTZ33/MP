@@ -1,38 +1,51 @@
 # MP — Music Player
 
-Десктопный музыкальный плеер на Electron с адаптивной темой, поиском музыки в интернете и настраиваемыми горячими клавишами.
+A desktop music player built with Electron, featuring an adaptive theme, internet music search, and customizable hotkeys.
 
-## Возможности
+## Features
 
-- 🎨 Адаптивная тема — интерфейс подстраивается под цвет обложки трека
-- 🎧 Локальное воспроизведение MP3
-- 🔍 Поиск музыки в интернете (через YouTube)
-- ⌨️ Настраиваемые горячие клавиши
-- 📝 Тексты песен (из файла или из интернета)
-- 🎚️ 10-полосный эквалайзер
-- 🌙 Тёмный минималистичный интерфейс
-- 🖥️ Кроссплатформенность (Windows, macOS, Linux)
+- 🎨 Adaptive theme — the UI picks up the dominant color from each track's cover art
+- 🎧 Local MP3 playback
+- 🔍 Internet music search (via YouTube)
+- ⌨️ Customizable hotkeys
+- 📝 Lyrics (from file or from the internet)
+- 🎚️ 10-band equalizer
+- 🌙 Dark, minimal UI
+- 🖥️ Cross-platform (Windows, macOS, Linux)
 
-## Технологии
+## Tech Stack
 
 - Electron
 - JavaScript / HTML / CSS
 - Node.js
-- yt-search (поиск)
-- yt-dlp (получение аудио)
+- yt-search (search)
+- yt-dlp (audio extraction)
 
-## Установка
+## Download
 
-### Требования
+Grab the ready-to-use installer from the [Releases page](https://github.com/ZenTZ33/MP/releases/latest):
+
+1. Download `MP Setup 1.1.0.exe`.
+2. Run it and install.
+3. A shortcut will appear on your desktop.
+
+No Node.js or terminal needed — just install and use.
+
+## Run from Source (for developers)
+
+### Requirements
 
 - Node.js (v16+)
 - npm
-- yt-dlp.exe (положить в папку `binaries/`)
+- `yt-dlp.exe` (place it in the `binaries/` folder)
 
-### Запуск из исходников
+### Setup
 
 ```bash
 git clone https://github.com/ZenTZ33/MP.git
 cd MP
 npm install
 npm start
+Build
+npm run build
+The output will be in the dist/ folder.
